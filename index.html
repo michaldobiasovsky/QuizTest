@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Studijní Studio ULTIMATE 6.2 🎓</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <style>
+        :root { 
+            --primary: #1877f2; --bg: #f0f2f5; --card: #ffffff; 
+            --text: #1c1e21; --danger: #fa3e3e; --success: #28a745; 
+            --sidebar-width: 320px;
+        }
+
+        * { box-sizing: border-box; } /* Zabrání rozpadu šířky kvůli paddingu */
+
+        body { 
+            font-family: 'Segoe UI', system-ui, sans-serif; 
+            background: var(--bg); color: var(--text); 
+            margin: 0; padding: 0;
+            display: flex; height: 100vh; overflow: hidden; 
+        }
+        
+        /* Sidebar - fixní šířka, vlastní scrollování */
+        aside { 
+            width: var(--sidebar-width); background: #fff; 
+            border-right: 1px solid #ddd; display: flex; 
+            flex-direction: column; padding: 20px; flex-shrink: 0;
+        }
+
+        #collections-list { flex: 1; overflow-y: auto; margin: 15px 0; padding-right: 5px; }
+
+        .coll-item { 
+            display: flex; align-items: center; padding: 10px; 
+            border-radius: 8px; cursor: pointer; margin-bottom: 5px; 
+            transition: 0.2s; border: 1px solid transparent; background: #f9f9f9;
+        }
+        .coll-item:hover { background: #f0f2f5; }
+        .coll-item.active { background: #e7f3ff; border-color: var(--primary); color: var(--primary); font-weight: bold; }
+        .coll-checkbox { margin-right: 10px; cursor: pointer; width: 18px; height: 18px; }
+        
+        /* Hlavní plocha */
+        main { flex: 1; padding: 25px; overflow-y: auto; display: flex; flex-direction: column; }
+        .card { 
+            background: var(--card); padding: 25px; border-radius: 16px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08); margin-bottom: 20px;
+            width: 100%; max-width: 1000px; margin-left: auto; margin-right: auto;
+        }
+        
+        /* Tlačítka */
+        .btn { 
+            background: var(--primary); color: white; border: none; 
+            padding: 12px 20px; border-radius: 10px; cursor: pointer; 
+            font-weight: 600; font-size: 14px; transition: 0.2s;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        .btn:hover { filter: brightness(0.9); transform: translateY(-1px); }
+        .btn-danger { background: var(--danger); }
+        .btn-sec { background: #e4e6eb; color: #050505; }
+        
+        input, textarea, select { 
+            border: 1px solid #ddd; border-radius: 8px; padding: 12px; 
+            font-size: 14px; width: 100%; margin-bottom: 10px;
+        }
+
+        /* MATCHING (Dva sloupce) - Oprava rozpadu */
+        .matching-wrapper {
+            display: flex; gap: 20px; margin-top: 20px; align-items: flex-start;
+        }
+        .match-column { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+        .match-card { 
+            padding: 15px; border: 2px solid #eee; border-radius: 12px; 
+            cursor: pointer; text-align: center; background: white; 
+            font-weight: 600; transition: 0.2s; min-height: 70px;
+            display: flex; align-items: center; justify-content: center;
+            word-break: break-word; /* Zalomení dlouhých slov */
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        .match-card:hover { border-color: var(--primary); background: #f0f7ff; }
+        .match-card.selected { border-color: var(--primary); background: var(--primary); color: white; }
+        .match-card.matched { opacity: 0; pointer-events: none; transform: scale(0.9); }
+
+        /* ABC Režim */
+        .abc-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 20px; }
+        .quiz-option { 
+            background: #f0f2f5; padding: 20px; border-radius: 12px; 
+            cursor: pointer; border: 2px solid transparent; font-weight: 500;
+            transition: 0.2s; text-align: center;
+        }
+        .correct { background: #d4edda !important; border-color: var(--success) !important; }
+        .wrong { background: #f8d7da !important; border-color: var(--danger) !important; }
+
+        .hidden { display: none; }
+        .word-row { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid #eee; }
+    </style>
+</head>
+<body>
+
+    <aside>
+        <h2 style="margin-top: 0;">✈️ Pilot Studio</h2>
+        <div id="collections-list"></div>
+        <button class="btn" style="width: 100%;" onclick="showScreen('importer')">➕ Nový Import</button>
+        <button class="btn btn-sec" style="width: 100%; margin-top: 10px;" onclick="goToModeSelection()">🚀 SPUSTIT STUDIUM</button>
+    </aside>
+
+    <main>
+        <!-- SCREEN: IMPORTER -->
+        <div id="screen-importer" class="screen">
+            <div class="card">
+                <h1>Nahrát data</h1>
+                <input type="text" id="new-coll-name" placeholder="Název sady...">
+                <button class="btn btn-sec" onclick="document.getElementById('pdf-file').click()">📁 Vybrat PDF</button>
+                <input type="file" id="pdf-file" class="hidden" accept="application/pdf">
+                <textarea id="raw-input" placeholder="Text se objeví zde..."></textarea>
+                <button class="btn" style="width:100%" onclick="saveParsedCollection()">Uložit kolekci ✨</button>
+            </div>
+        </div>
+
+        <!-- SCREEN: MODE SELECTION -->
+        <div id="screen-modes" class="screen hidden">
+            <div class="card">
+                <h1>Vyber režim ⚡</h1>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                    <button class="btn" style="height: 100px; font-size: 1.1em;" onclick="setupQuiz('abc')">📝 ABC Test</button>
+                    <button class="btn" style="height: 100px; font-size: 1.1em;" onclick="setupQuiz('match')">🔗 Párování</button>
+                    <button class="btn btn-danger" style="height: 100px; font-size: 1.1em;" onclick="setupQuiz('hell')">🔥 PEKLO (chyby)</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- SCREEN: SETUP -->
+        <div id="screen-setup" class="screen hidden">
+            <div class="card">
+                <h1>Nastavení</h1>
+                <label>Směr:</label>
+                <select id="quiz-direction">
+                    <option value="en-cz">EN ➔ CZ</option>
+                    <option value="cz-en">CZ ➔ EN</option>
+                    <option value="random">Mix</option>
+                </select>
+                <label>Limit otázek (0 = vše):</label>
+                <input type="number" id="quiz-limit" value="10">
+                <button class="btn" style="width:100%" onclick="startFinalQuiz()">Start 🏁</button>
+            </div>
+        </div>
+
+        <!-- SCREEN: ABC -->
+        <div id="screen-abc" class="screen hidden">
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; margin-bottom: 20px;">
+                    <span id="abc-progress">0/0</span>
+                    <strong id="abc-score">Skóre: 0</strong>
+                </div>
+                <h2 id="abc-q" style="text-align:center; font-size: 2em; margin-bottom: 30px;">?</h2>
+                <div id="abc-options" class="abc-grid"></div>
+                <div id="abc-feedback" style="text-align:center; margin-top:20px; font-weight:bold;"></div>
+                <button class="btn" style="width:100%; margin-top:30px;" onclick="nextAbcQuestion()">Další slovo ➡️</button>
+            </div>
+        </div>
+
+        <!-- SCREEN: MATCHING -->
+        <div id="screen-matching" class="screen hidden">
+            <div class="card">
+                <h2 style="text-align:center">🔗 Spoj správné dvojice</h2>
+                <div class="matching-wrapper">
+                    <div id="match-left" class="match-column"></div>
+                    <div id="match-right" class="match-column"></div>
+                </div>
+                <button class="btn btn-sec" style="width:100%; margin-top:30px;" onclick="goToModeSelection()">Zrušit</button>
+            </div>
+        </div>
+
+        <!-- SCREEN: EDITOR -->
+        <div id="screen-editor" class="screen hidden">
+            <div class="card">
+                <input type="text" id="edit-name" style="font-size: 1.5em; font-weight:bold;">
+                <button class="btn btn-sec" onclick="renameCollection()">Přejmenovat</button>
+                <hr>
+                <div id="editor-list" style="max-height: 400px; overflow-y: auto;"></div>
+                <div style="display:flex; gap:10px; margin-top:20px;">
+                    <button class="btn" onclick="saveEdits()">Uložit změny ✅</button>
+                    <button class="btn btn-danger" onclick="deleteCollection()">Smazat sadu 🗑️</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- SCREEN: RESULTS -->
+        <div id="screen-results" class="screen hidden">
+            <div class="card" style="text-align:center">
+                <h1>Výsledek</h1>
+                <div id="final-stats" style="font-size: 3em; font-weight:bold; color:var(--primary)">0 / 0</div>
+                <button class="btn" onclick="goToModeSelection()">Zkusit znovu</button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+        let db = JSON.parse(localStorage.getItem('study_db_v62')) || {};
+        let activeColl = null; let quizPool = []; let currentMode = '';
+        let quizIndex = 0; let score = 0; let selectedLeft = null; let selectedRight = null;
+
+        function saveDb() { localStorage.setItem('study_db_v62', JSON.stringify(db)); renderSidebar(); }
+        function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden')); document.getElementById('screen-' + id).classList.remove('hidden'); }
+        
+        function renderSidebar() {
+            const list = document.getElementById('collections-list'); list.innerHTML = "";
+            Object.keys(db).sort().forEach(name => {
+                const div = document.createElement('div');
+                div.className = 'coll-item' + (activeColl === name ? ' active' : '');
+                div.innerHTML = `<input type="checkbox" class="coll-checkbox" value="${name}" onclick="event.stopPropagation()">
+                                 <span style="flex:1" onclick="openEditor('${name}')">${name} (${db[name].length})</span>`;
+                list.appendChild(div);
+            });
+        }
+
+        // IMPORTER
+        document.getElementById('pdf-file').addEventListener('change', async (e) => {
+            const file = e.target.files[0]; const reader = new FileReader();
+            reader.onload = async function() {
+                const typedarray = new Uint8Array(this.result);
+                const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                let text = "";
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i); const content = await page.getTextContent();
+                    text += content.items.map(item => item.str).join(" ") + "\n";
+                }
+                document.getElementById('raw-input').value = text;
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function saveParsedCollection() {
+            const name = document.getElementById('new-coll-name').value.trim() || "Sada " + Date.now();
+            const raw = document.getElementById('raw-input').value; const words = [];
+            const cleaned = raw.replace(/=\s*/g, '').replace(/\xA0/g, ' ');
+            const entries = cleaned.split(/\s*\d+\s*\.\s*/);
+            entries.forEach(entry => {
+                let clean = entry.trim(); if (clean.length < 3 || clean.includes('quizlet.com')) return;
+                let term, def; let parts = clean.split(/\s{2,}/);
+                if (parts.length >= 2) { term = parts[0]; def = parts[1]; }
+                else {
+                    let idx = clean.search(/[áčďéěíňóřšťúůýž]/i);
+                    if (idx !== -1) { let space = clean.lastIndexOf(' ', idx); term = clean.substring(0, space !== -1 ? space : idx).trim(); def = clean.substring(space !== -1 ? space : idx).trim(); }
+                }
+                if (term && def) words.push({ term, def, errors: 0 });
+            });
+            if (words.length > 0) { db[name] = words; saveDb(); alert("Uloženo!"); }
+        }
+
+        function openEditor(name) {
+            activeColl = name; showScreen('editor'); document.getElementById('edit-name').value = name;
+            const list = document.getElementById('editor-list'); list.innerHTML = "";
+            db[name].forEach((w, i) => {
+                list.innerHTML += `<div class="word-row"><input type="text" value="${w.term}" id="t-${i}"><input type="text" value="${w.def}" id="d-${i}"><button class="btn btn-danger" onclick="deleteWord(${i})">×</button></div>`;
+            });
+            renderSidebar();
+        }
+
+        function renameCollection() {
+            const newName = document.getElementById('edit-name').value.trim();
+            if (newName && newName !== activeColl) { db[newName] = db[activeColl]; delete db[activeColl]; activeColl = newName; saveDb(); }
+        }
+
+        function saveEdits() {
+            db[activeColl].forEach((w, i) => { w.term = document.getElementById(`t-${i}`).value; w.def = document.getElementById(`d-${i}`).value; });
+            saveDb(); alert("Uloženo!");
+        }
+
+        function deleteCollection() { if (confirm("Smazat?")) { delete db[activeColl]; saveDb(); showScreen('importer'); } }
+
+        function goToModeSelection() {
+            const selected = Array.from(document.querySelectorAll('.coll-checkbox:checked')).map(cb => cb.value);
+            if (selected.length === 0) return alert("Vyber sadu!");
+            quizPool = []; selected.forEach(s => quizPool = quizPool.concat(db[s]));
+            showScreen('modes');
+        }
+
+        function setupQuiz(mode) { currentMode = mode; if (mode === 'match') return startMatching(); showScreen('setup'); }
+
+        function startFinalQuiz() {
+            const limit = parseInt(document.getElementById('quiz-limit').value);
+            if (currentMode === 'hell') quizPool = quizPool.filter(w => w.errors > 0).sort((a,b) => b.errors - a.errors);
+            else quizPool.sort(() => Math.random() - 0.5);
+            if (limit > 0) quizPool = quizPool.slice(0, limit);
+            quizIndex = 0; score = 0; showScreen('abc'); nextAbcQuestion();
+        }
+
+        function nextAbcQuestion() {
+            if (quizIndex >= quizPool.length) return finishQuiz();
+            document.getElementById('abc-feedback').innerText = "";
+            const raw = quizPool[quizIndex];
+            let dir = document.getElementById('quiz-direction').value; if (dir === 'random') dir = Math.random() > 0.5 ? 'en-cz' : 'cz-en';
+            const qText = dir === 'en-cz' ? raw.term : raw.def; const aCorrect = dir === 'en-cz' ? raw.def : raw.term;
+            document.getElementById('abc-q').innerText = qText;
+            document.getElementById('abc-progress').innerText = `${quizIndex + 1} / ${quizPool.length}`;
+            let options = [aCorrect]; while(options.length < 4 && options.length < quizPool.length) {
+                let r = quizPool[Math.floor(Math.random() * quizPool.length)];
+                let rt = dir === 'en-cz' ? r.def : r.term; if (!options.includes(rt)) options.push(rt);
+            }
+            options.sort(() => Math.random() - 0.5);
+            const optDiv = document.getElementById('abc-options'); optDiv.innerHTML = ""; optDiv.classList.remove('locked');
+            options.forEach(opt => {
+                const b = document.createElement('div'); b.className = 'quiz-option'; b.innerText = opt;
+                b.onclick = () => {
+                    if (optDiv.classList.contains('locked')) return; optDiv.classList.add('locked');
+                    if (opt === aCorrect) { b.classList.add('correct'); score++; document.getElementById('abc-score').innerText = `Skóre: ${score}`; }
+                    else { b.classList.add('wrong'); document.getElementById('abc-feedback').innerText = `Chyba! Správně: ${aCorrect}`; raw.errors++; saveDb(); }
+                };
+                optDiv.appendChild(b);
+            });
+            quizIndex++;
+        }
+
+        function startMatching() {
+            showScreen('matching'); selectedLeft = null; selectedRight = null;
+            const lCol = document.getElementById('match-left'); const rCol = document.getElementById('match-right');
+            lCol.innerHTML = ""; rCol.innerHTML = "";
+            let sub = [...quizPool].sort(() => Math.random() - 0.5).slice(0, 5);
+            let lItems = sub.map(w => ({ t: w.term, id: w.term })).sort(() => Math.random() - 0.5);
+            let rItems = sub.map(w => ({ t: w.def, id: w.term })).sort(() => Math.random() - 0.5);
+
+            lItems.forEach(it => {
+                const d = document.createElement('div'); d.className = 'match-card'; d.innerText = it.t; d.dataset.id = it.id;
+                d.onclick = () => { if (d.classList.contains('matched')) return; if (selectedLeft) selectedLeft.classList.remove('selected'); selectedLeft = d; d.classList.add('selected'); checkM(); };
+                lCol.appendChild(d);
+            });
+            rItems.forEach(it => {
+                const d = document.createElement('div'); d.className = 'match-card'; d.innerText = it.t; d.dataset.id = it.id;
+                d.onclick = () => { if (d.classList.contains('matched')) return; if (selectedRight) selectedRight.classList.remove('selected'); selectedRight = d; d.classList.add('selected'); checkM(); };
+                rCol.appendChild(d);
+            });
+        }
+
+        function checkM() {
+            if (selectedLeft && selectedRight) {
+                if (selectedLeft.dataset.id === selectedRight.dataset.id) {
+                    selectedLeft.classList.add('matched'); selectedRight.classList.add('matched');
+                    selectedLeft = null; selectedRight = null;
+                    if (!document.querySelector('.match-card:not(.matched)')) setTimeout(startMatching, 600);
+                } else {
+                    let a = selectedLeft; let b = selectedRight; setTimeout(() => { a.classList.remove('selected'); b.classList.remove('selected'); }, 400);
+                    selectedLeft = null; selectedRight = null;
+                }
+            }
+        }
+
+        function finishQuiz() { showScreen('results'); document.getElementById('final-stats').innerText = `${score} / ${quizPool.length}`; }
+        renderSidebar();
+    </script>
+</body>
+</html>
+
