@@ -390,7 +390,7 @@
                     let idx = clean.search(/[áčďéěíňóřšťúůýž]/i);
                     if (idx !== -1) { let space = clean.lastIndexOf(' ', idx); term = clean.substring(0, space !== -1 ? space : idx).trim(); def = clean.substring(space !== -1 ? space : idx).trim(); }
                 }
-                if (term && def) words.push({ term, def, errors: 0 });
+                if (term && def) words.push({ term, def, asked: 0, correct: 0 });
             });
             if (words.length > 0) { db[name] = words; saveDb(); alert("Uloženo!"); }
         }
@@ -433,8 +433,24 @@
 
         function startFinalQuiz() {
             const limit = parseInt(document.getElementById('quiz-limit').value);
-            if (currentMode === 'hell') quizPool = quizPool.filter(w => w.errors > 0).sort((a, b) => b.errors - a.errors);
-            else quizPool.sort(() => Math.random() - 0.5);
+            if (currentMode === 'hell') {
+                // PEKLO: pouze slova se chybami, seřazená od nejhorší úspěšnosti
+                quizPool = quizPool.filter(w => w.asked > 0 && w.correct < w.asked).sort((a, b) => (a.correct / a.asked) - (b.correct / b.asked));
+            } else {
+                // Normální režim: priorita na nová a chybná slova, s občasnou randomizací
+                quizPool.sort((a, b) => {
+                    // Malá šance (20%) na náhodné pořadí (aby viděl i slova co zná)
+                    if (Math.random() < 0.2) return Math.random() - 0.5;
+                    // Slova která nikdy nebyla zobrazena mají nejvyšší prioritu
+                    if (a.asked === 0 && b.asked === 0) return Math.random() - 0.5;
+                    if (a.asked === 0) return -1;
+                    if (b.asked === 0) return 1;
+                    // Slova s nižší úspěšností mají prioritu
+                    const successA = a.correct / a.asked;
+                    const successB = b.correct / b.asked;
+                    return successA - successB;
+                });
+            }
             if (limit > 0) quizPool = quizPool.slice(0, limit);
             quizIndex = 0; score = 0; showScreen('abc'); nextAbcQuestion();
         }
@@ -443,6 +459,7 @@
             if (quizIndex >= quizPool.length) return finishQuiz();
             document.getElementById('abc-feedback').innerText = "";
             const raw = quizPool[quizIndex];
+            raw.asked++; saveDb();
             let dir = document.getElementById('quiz-direction').value; if (dir === 'random') dir = Math.random() > 0.5 ? 'en-cz' : 'cz-en';
             const qText = dir === 'en-cz' ? raw.term : raw.def; const aCorrect = dir === 'en-cz' ? raw.def : raw.term;
             document.getElementById('abc-q').innerText = qText;
@@ -457,8 +474,8 @@
                 const b = document.createElement('div'); b.className = 'quiz-option'; b.innerText = opt;
                 b.onclick = () => {
                     if (optDiv.classList.contains('locked')) return; optDiv.classList.add('locked');
-                    if (opt === aCorrect) { b.classList.add('correct'); score++; document.getElementById('abc-score').innerText = `Skóre: ${score}`; }
-                    else { b.classList.add('wrong'); document.getElementById('abc-feedback').innerText = `Chyba! Správně: ${aCorrect}`; raw.errors++; saveDb(); }
+                    if (opt === aCorrect) { b.classList.add('correct'); score++; raw.correct++; document.getElementById('abc-score').innerText = `Skóre: ${score}`; saveDb(); }
+                    else { b.classList.add('wrong'); document.getElementById('abc-feedback').innerText = `Chyba! Správně: ${aCorrect}`; }
                 };
                 optDiv.appendChild(b);
             });
